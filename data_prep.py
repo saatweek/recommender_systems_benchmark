@@ -97,7 +97,8 @@ def encode_rating(rating: int) -> np.array:
 def prepare_data(reviews_per_user:int | None = None,
                  top_percentile:float | None = None,
                  num_user: int | None = None,
-                 per_user : bool = True):
+                 per_user : bool = True,
+                 seed: int | None = None):
     """
     Prepares the data to be input for different ML models
     :param per_user: Set True if you're doing analysis on a per-user level and False if using collaborative filtering
@@ -106,6 +107,11 @@ def prepare_data(reviews_per_user:int | None = None,
     :param top_percentile: if specified, only movies with vote_count in the top_percentile would be considered for training
     :return: Filtered user data tailored to per-user and collaborative code
     """
+    # Preserve the original standalone sampling when no seed is supplied. The
+    # benchmark passes a different recorded seed for each iteration.
+    user_seed = 77 if seed is None else seed
+    review_seed = 9 if seed is None else seed
+
     # Download dataset
     print("Downloading dataset..")
     path = kagglehub.dataset_download("rounakbanik/the-movies-dataset")
@@ -164,7 +170,7 @@ def prepare_data(reviews_per_user:int | None = None,
             print(f"There are {len(user_review_counts)} total users")
             heavy_users = user_review_counts[user_review_counts['num_ratings'] >= 2]
             print(f"There are {len(heavy_users)} users with at least 2 reviews")
-            sample_users = heavy_users['userId'].sample(n=num_user, random_state=77).tolist()
+            sample_users = heavy_users['userId'].sample(n=num_user, random_state=user_seed).tolist()
             merged = merged[merged['userId'].isin(sample_users)]
     else:
         # Merging the ratings and movies dataset before filtering because some users have reviews for movieId that are
@@ -184,13 +190,13 @@ def prepare_data(reviews_per_user:int | None = None,
             if len(heavy_users) < num_user:
                 raise ValueError(f"Only {len(heavy_users)} users have ≥{reviews_per_user} ratings (requested: {num_user})")
             print(f"But we only want {num_user} users..")
-            sample_users = heavy_users['userId'].sample(n=num_user, random_state=77).tolist()
-            merged = merged[merged['userId'].isin(sample_users)].groupby('userId').sample(n=reviews_per_user, random_state=9)
+            sample_users = heavy_users['userId'].sample(n=num_user, random_state=user_seed).tolist()
+            merged = merged[merged['userId'].isin(sample_users)].groupby('userId').sample(n=reviews_per_user, random_state=review_seed)
             print(f"merge.shape after sampling {num_user} users : {merged.shape}")
         else:
             # if the reviews_per_user is not None, but the num_user is None, then we want to sample review_per_user number
             # of reviews from all the users
-            merged = merged[merged['userId'].isin(heavy_users['userId'])].groupby('userId').sample(n=reviews_per_user, random_state=9)
+            merged = merged[merged['userId'].isin(heavy_users['userId'])].groupby('userId').sample(n=reviews_per_user, random_state=review_seed)
             print(f"merge.shape after filtering out users with more than {reviews_per_user} reviews : {merged.shape}")
 
     #Encoding all the columns with the functions we created earlier
